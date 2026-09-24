@@ -1,3 +1,6 @@
+# ${DB_PASSWORD} is substituted from the repo-root .env, which compose does not find on
+# its own — it only reads a .env sitting next to this file. Start it with:
+#   docker compose --env-file ../.env up -d
 services:
   db:
     image: postgres:16

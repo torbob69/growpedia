@@ -1,0 +1,147 @@
+# Root compose file — sits next to .env, so DB_PASSWORD / JWT_SECRET_KEY / GOOGLE_API_KEY
+# are picked up automatically (unlike the per-db compose files under database-*/, which need
+# --env-file ../.env because compose only auto-reads a .env beside itself).
+#
+# Only the frontend and the gateway (the single public "backend" entrypoint) get host port
+# mappings. auth/user/chat/vector-service are internal-only, reached by the gateway over
+# growpedia-network — nothing else needs to dial them directly.
+#
+#   docker compose up --build
+
+services:
+  auth-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: auth-db
+    volumes:
+      - auth-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d auth-db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [growpedia-network]
+
+  chat-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: chat-db
+    volumes:
+      - chat-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d chat-db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [growpedia-network]
+
+  vector-db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: rag-chunk-embedding
+    volumes:
+      - vector-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d rag-chunk-embedding"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks: [growpedia-network]
+
+  auth-service:
+    build: ./fast-api-backend/auth-service
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: auth-db
+      DB_PORT: 5432
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks: [growpedia-network]
+
+  user-service:
+    build: ./fast-api-backend/user-service
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: auth-db
+      DB_PORT: 5432
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      AUTH_SERVICE_URL: http://auth-service:8003
+    depends_on:
+      auth-db:
+        condition: service_healthy
+    networks: [growpedia-network]
+
+  vector-service:
+    build: ./fast-api-backend/vector-service
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: vector-db
+      DB_PORT: 5432
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      AUTH_SERVICE_URL: http://auth-service:8003
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      vector-db:
+        condition: service_healthy
+    networks: [growpedia-network]
+
+  chat-service:
+    build: ./fast-api-backend/chat-service
+    environment:
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: chat-db
+      DB_PORT: 5432
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY}
+      VECTOR_SEARCH_URL: http://vector-service:8001/search
+      AUTH_SERVICE_URL: http://auth-service:8003
+    depends_on:
+      chat-db:
+        condition: service_healthy
+    networks: [growpedia-network]
+
+  gateway:
+    build:
+      context: ./fast-api-backend
+      dockerfile: gateway.Dockerfile
+    environment:
+      VECTOR_SERVICE_URL: http://vector-service:8001
+      CHAT_SERVICE_URL: http://chat-service:8002
+      AUTH_SERVICE_URL: http://auth-service:8003
+      USER_SERVICE_URL: http://user-service:8004
+    ports:
+      - "8000:8000"
+    depends_on: [auth-service, user-service, vector-service, chat-service]
+    networks: [growpedia-network]
+
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_GATEWAY: http://gateway:8000
+    ports:
+      - "5173:5173"
+    depends_on: [gateway]
+    networks: [growpedia-network]
+
+networks:
+  growpedia-network:
+    driver: bridge
+
+volumes:
+  auth-db-data:
+  chat-db-data:
+  vector-db-data:
