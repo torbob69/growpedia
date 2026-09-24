@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -10,14 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_session
 from models.models import Role, User
 
-JWT_SECRET_KEY = dotenv.get_key('C:/Growtopia-RAG/fast-api-backend/auth-service/.env', 'JWT_SECRET_KEY')
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or dotenv.get_key('C:/Growtopia-RAG/.env', 'JWT_SECRET_KEY')
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 def hash_password(password: str) -> str:
-    # bcrypt silently truncates at 72 bytes; fine for normal passwords.
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
 def verify_password(password: str, password_hash: str) -> bool:

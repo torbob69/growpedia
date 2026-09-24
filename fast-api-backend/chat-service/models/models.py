@@ -17,10 +17,6 @@ class ChatSession(Base):
     __tablename__ = "chat_session"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # No ForeignKey: users live in auth-db, a different database on a different port, so
-    # Postgres cannot enforce this one. Holds the JWT's `sub`, which auth-service sets to
-    # str(user.id). A user deleted there leaves their sessions behind here — the same
-    # stateless tradeoff /search already makes.
     user_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -43,12 +39,7 @@ class Interaction(Base):
     )
     query: Mapped[str] = mapped_column(Text, nullable=False)
     answer: Mapped[str] = mapped_column(Text, nullable=False)
-    # Which wiki pages the answer was grounded in. The retrieved chunks themselves are not
-    # kept, so this is the only way to audit a wrong answer after the fact.
     sources: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False)
-    # Gemini's own id for this turn, handed back as previous_interaction_id on the next one
-    # so the model keeps the thread without us replaying the transcript into every prompt.
-    # Nullable because the provider may not return one.
     provider_interaction_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

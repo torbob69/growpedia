@@ -1,3 +1,5 @@
+import os
+
 import bcrypt
 import dotenv
 import jwt
@@ -8,12 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.connection import get_session
 from models.models import User
 
-JWT_SECRET_KEY = dotenv.get_key('C:/Growtopia-RAG/fast-api-backend/user-service/.env', 'JWT_SECRET_KEY')
+JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY") or dotenv.get_key('C:/Growtopia-RAG/.env', 'JWT_SECRET_KEY')
 JWT_ALGORITHM = "HS256"
 
-# tokenUrl just tells Swagger's "Authorize" button where to fetch a token from;
-# auth-service issues the tokens, user-service only ever verifies them.
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="http://127.0.0.1:8003/login")
+AUTH_SERVICE_URL = os.getenv("AUTH_SERVICE_URL", "http://127.0.0.1:8003")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{AUTH_SERVICE_URL}/login")
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()

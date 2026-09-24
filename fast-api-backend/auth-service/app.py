@@ -26,7 +26,6 @@ def health():
 
 @app.post('/register', response_model=UserRead, status_code=201)
 async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_session)):
-    # public signup always lands as "user" — admins are created via /admin/users
     return await register_user(db, payload.gmail, payload.username, payload.password, role=Role.user)
 
 @app.post('/login', response_model=Token)

@@ -1,9 +1,13 @@
+import os
+
 import dotenv
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
 
-DB_PASSWORD = dotenv.get_key('C:/Growtopia-RAG/database-vector-rag/.env', 'DB_PASSWORD')
-DB_URL = f"postgresql+asyncpg://admin:{DB_PASSWORD}@localhost:5433/rag-chunk-embedding"
+DB_PASSWORD = os.getenv("DB_PASSWORD") or dotenv.get_key('C:/Growtopia-RAG/.env', 'DB_PASSWORD')
+DB_HOST = os.getenv("DB_HOST", "localhost")
+DB_PORT = os.getenv("DB_PORT", "5433")
+DB_URL = f"postgresql+asyncpg://admin:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/rag-chunk-embedding"
 
 engine = create_async_engine(DB_URL)
 

@@ -29,7 +29,6 @@ async def change_password(
 ):
     return await update_password(db, user, payload.current_password, payload.new_password)
 
-# no auth: theme is a cosmetic preference, not worth gating behind a login
 @app.patch('/users/{user_id}/theme', response_model=UserRead)
 async def change_theme(
     user_id: int,

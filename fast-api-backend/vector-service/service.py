@@ -7,10 +7,6 @@ from models.models import Chunk
 from schemas.schemas import SearchHit
 
 async def seeding(db: AsyncSession):
-    # ponytail: "already seeded" is derived from the table itself instead of a
-    # separate flag/table — one less thing to keep in sync. Doesn't protect
-    # against two concurrent /seed calls racing past this check; add a
-    # transaction-level lock if that becomes a real scenario.
     already_seeded = await db.execute(select(Chunk.id).limit(1))
     if already_seeded.scalar_one_or_none() is not None:
         raise HTTPException(status.HTTP_409_CONFLICT, "vector store already seeded")
@@ -28,21 +24,10 @@ async def seeding(db: AsyncSession):
     await db.commit()
 
 
-CANDIDATES = 50   # per retriever, before fusion
-RRF_K = 60        # standard damping constant; bigger = flatter, less top-heavy
-DF_FRAC = 0.01    # a lexeme in >1% of chunks is not a proper noun; sparse ignores it.
-                  # Relative, not an absolute count: every re-crawl grows the corpus and a
-                  # fixed cutoff silently changes meaning as it does.
+CANDIDATES = 50
+RRF_K = 60
+DF_FRAC = 0.01
 
-# Dense (pgvector cosine) + sparse (Postgres FTS) fused with Reciprocal Rank Fusion.
-# RRF sums 1/(k+rank) per retriever, so it never compares a cosine distance against a
-# ts_rank score, only positions — the two scales are unrelated and normalising them is
-# guesswork.
-#
-# Sparse only ever sees the RARE lexemes of the query, ANDed. Postgres ts_rank_cd has no
-# IDF and no tf saturation (unlike real BM25), so handing it a whole question lets a chunk
-# repeating "fish" 30x outrank the one chunk actually titled "Mint". Restricting it to
-# proper nouns plays to the one thing sparse beats dense at.
 HYBRID = text("""
 WITH q AS (
     SELECT CAST(:qvec AS vector) AS qv,
@@ -82,13 +67,6 @@ LIMIT :top
 """)
 
 
-# ponytail: 20 candidates reranked, on CPU. Measured on a 7-query eval: pools of 10, 20
-# and 50 all scored 7/7, at 266 / 627 / 1148 ms — so depth buys nothing measurable here and
-# costs latency linearly. 20 over 10 only because the deepest answer in that eval sat at
-# hybrid rank 8, and a pool of 10 leaves no headroom.
-# The ceiling: anything hybrid ranks below 20 can never be recovered, the reranker only
-# reorders what it is handed. Raise this (or move the reranker to GPU, ~3x faster) if a
-# query is known to bury its answer deeper.
 RERANK_POOL = 20
 
 
@@ -105,11 +83,6 @@ async def search(db: AsyncSession, query: str, top_k: int, embedder, reranker) -
     if not rows:
         return []
 
-    # Second stage. The retriever is a bi-encoder: query and chunk are embedded
-    # separately, so a chunk's vector never sees the query — cheap but shallow, and it
-    # cannot tell two chunks about the same item apart when only one answers the question.
-    # The cross-encoder runs query and chunk through the transformer together for a single
-    # relevance score. Too slow to run over the whole corpus, ideal over a shortlist.
     scores = reranker.predict([(query, r.content) for r in rows])
     best = sorted(zip(scores, rows), key=lambda pair: -pair[0])[:top_k]
 

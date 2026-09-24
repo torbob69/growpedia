@@ -1,6 +1,6 @@
 # torch here is the CUDA build: the reranker runs on GPU, which is ~3x faster and
 # dominates /search latency. The +cu124 wheel is not on PyPI, hence the index url.
-# CPU-only box: drop the index line and install plain torch — app.py detects the
+# CPU-only box: drop the index line and install plain torch â€” app.py detects the
 # absence of cuda and falls back automatically.
 --extra-index-url https://download.pytorch.org/whl/cu124
 

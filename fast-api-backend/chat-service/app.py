@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.connection import Base, engine, get_session
@@ -11,9 +12,6 @@ from service import answer, http, list_interactions, list_sessions
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ponytail: create_all rather than the alembic scaffold auth- and vector-service carry.
-    # Two tables, no migration history, nothing in production to migrate. Switch to alembic
-    # the first time a column has to change on a database that already holds rows.
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield
@@ -21,6 +19,13 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get('/health')
@@ -33,8 +38,6 @@ async def chat(
     req: ChatRequest,
     db: AsyncSession = Depends(get_session),
     user_id: int = Depends(current_user_id),
-    # the caller's raw token, forwarded to /search so vector-service authorises the user
-    # itself. FastAPI resolves oauth2_scheme once and reuses it for current_user_id above.
     token: str = Depends(oauth2_scheme),
 ):
     return await answer(db, req.query, req.session_id, user_id, token)
